@@ -69,6 +69,8 @@ class Trainer(nn):
         return A
 
     def batch_norm(self, l, Z, B=0.9):
+        # overriding batch_norm method to compute EWMAs of mean and std of each activation
+
         # calculating mean and standard deviation
         stats = self.compute_stats(Z)
 
@@ -203,7 +205,7 @@ class Trainer(nn):
         np.savez(
             self.training_cache,
             time_stamp=self.t,
-            EMAs=(self.v, self.s),
+            EWMAs=(self.v, self.s),
             cost_log=self.cost_log
         )
 
@@ -212,7 +214,7 @@ class Trainer(nn):
             # loading saved values of t, momentum, RMS and cost
             with np.load(self.training_cache, "r", allow_pickle=True) as data:
                 self.t = data["time_stamp"]
-                self.v, self.s = data["EMAs"].tolist()
+                self.v, self.s = data["EWMAs"].tolist()
                 self.cost_log = data["cost_log"].tolist()
 
                 return True
@@ -225,12 +227,11 @@ class Trainer(nn):
     def __get_cost(self, Y):
         m = Y.shape[1]
 
-        # computing L2 regularization term
-        L2_term = (self.hyperparams["lambd"] / (2 * m)) * np.sum(
-            [np.sum(self.params["W" + str(l)] ** 2) for l in range(1, self.L + 1)])
+        # computing L2 regularization cost
+        L2_cost_term = self.__get_L2_cost(m)
 
         # computing cost
-        cost = self.hyperparams["cost_function"]({"Y": Y, "Y_hat": self.output}) + L2_term
+        cost = self.hyperparams["cost_function"]({"Y": Y, "Y_hat": self.output}) + L2_cost_term
 
         return cost
 
@@ -281,7 +282,7 @@ class Trainer(nn):
             self.grads["dgamma" + str(l)] = dgamma
 
         # L2 regularization term
-        L2_term = self.hyperparams["lambd"] / m * W
+        L2_term = self.__get_L2_term(m, W)
 
         # Z = W * A_prev + b, dZ/dW = A_prev
         dW = 1 / m * np.dot(dZ, A_prev.T) + (self.hyperparams["lambd"] / m * W) + L2_term
@@ -335,6 +336,16 @@ class Trainer(nn):
 
         return dA
 
+    def __get_L2_term(self, m, W):
+        return self.hyperparams["lambd"] / m * W
+
+    def __get_L2_cost(self, m):
+        # L2 regularization term = lambd / 2m * sum(W ** 2)
+        L2_term = (self.hyperparams["lambd"] / (2 * m)) * np.sum(
+            [np.sum(self.params["W" + str(l)] ** 2) for l in range(1, self.L + 1)])
+
+        return L2_term
+
     # optimization
     def __update_parameters(self):
         optimizer = self.hyperparams["optimizer"]
@@ -347,7 +358,7 @@ class Trainer(nn):
             grad_key = "d" + param_key
 
             # updating momentum and RMS
-            v, s = self.__update_EMAs(grad_key)
+            v, s = self.__update_EWMAs(grad_key)
 
             # updating parameters
             self.params[param_key] = optimizer({
@@ -358,7 +369,7 @@ class Trainer(nn):
                 "s": s
             })
 
-    def __update_EMAs(self, key):
+    def __update_EWMAs(self, key):
         beta1 = self.hyperparams["beta1"]
         beta2 = self.hyperparams["beta2"]
 
@@ -370,7 +381,7 @@ class Trainer(nn):
 
         # computing and returning v and s for optimization
 
-        # correcting bias (bias should not be included in the EMAs)
+        # correcting bias (bias should not be included in the EWMAs)
         v = self.v[key] / (1 - beta1 ** self.t)
         s = self.s[key] / (1 - beta2 ** self.t)
 
