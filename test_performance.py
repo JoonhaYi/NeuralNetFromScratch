@@ -54,6 +54,18 @@ def get_accuracy(model, X, Y):
     return accuracy
 
 
+def plot_cost(training_cache_file):
+    # cost log
+    with np.load(training_cache_file, "r", allow_pickle=True) as data:
+        cost_log = data["cost_log"].tolist()
+
+    # plotting cost
+    plt.plot(cost_log)
+    plt.ylabel('Cost')
+    plt.xlabel('Iterations')
+    plt.show()
+
+
 # loading datasets
 with h5py.File("datasets/datasets.h5", "r") as datasets:
     training_set_X = datasets["training_set_X"][:]
@@ -67,6 +79,7 @@ with h5py.File("datasets/datasets.h5", "r") as datasets:
 
 # loading neural network
 model_file = r"parameters/final_model_params.npz"
+training_cache_file = r"parameters/final_model_training_cache.npz"
 
 # computing accuracy
 training_set_accuracy = get_accuracy(model_file, training_set_X, training_set_Y)
@@ -77,6 +90,8 @@ dev_set_accuracy = get_accuracy(model_file, dev_set_X, dev_set_Y)
 print("test set accuracy: {0}%".format(test_set_accuracy * 100))
 print("dev set accuracy: {0}%".format(dev_set_accuracy * 100))
 print("training set accuracy: {0}%".format(training_set_accuracy * 100))
+
+plot_cost(training_cache_file)
 
 # # showing miss classified images
 # predictions = get_prediction(model_file, test_set_X, test_set_Y)
